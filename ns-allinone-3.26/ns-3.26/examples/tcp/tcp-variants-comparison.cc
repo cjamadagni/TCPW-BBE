@@ -322,6 +322,12 @@ int main (int argc, char *argv[])
       Config::SetDefault ("ns3::TcpWestwood::ProtocolType", EnumValue (TcpWestwood::WESTWOODPLUS));
       Config::SetDefault ("ns3::TcpWestwood::FilterType", EnumValue (TcpWestwood::TUSTIN));
     }
+  else if (transport_prot.compare ("TcpWestwoodBBE") == 0)
+    { 
+      Config::SetDefault ("ns3::TcpL4Protocol::SocketType", TypeIdValue (TcpWestwood::GetTypeId ()));
+      Config::SetDefault ("ns3::TcpWestwood::ProtocolType", EnumValue (TcpWestwood::WESTWOODBBE));
+      Config::SetDefault ("ns3::TcpWestwood::FilterType", EnumValue (TcpWestwood::TUSTIN));
+    }    
   else
     {
       NS_LOG_DEBUG ("Invalid TCP version");
@@ -424,6 +430,7 @@ int main (int argc, char *argv[])
       if (transport_prot.compare ("TcpNewReno") == 0
           || transport_prot.compare ("TcpWestwood") == 0
           || transport_prot.compare ("TcpWestwoodPlus") == 0
+          || transport_prot.compare ("TcpWestwoodBBE") == 0
           || transport_prot.compare ("TcpHybla") == 0
           || transport_prot.compare ("TcpHighSpeed") == 0
           || transport_prot.compare ("TcpHtcp") == 0
