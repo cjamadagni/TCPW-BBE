@@ -126,6 +126,9 @@ protected:
   double                 m_lastSampleBW;           //!< Last bandwidth sample
   double                 m_lastBW;                 //!< Last bandwidth sample after being filtered
   Time                   m_minRtt;                 //!< Minimum RTT
+  Time                   m_maxRtt;                 //!< Maximum RTT
+  Time                   m_curRtt;                 //!< Current RTT
+  double                 m_prevMaxRtt; 
   enum ProtocolType      m_pType;                  //!< 0 for Westwood, 1 for Westwood+
   enum FilterType        m_fType;                  //!< 0 for none, 1 for Tustin
 

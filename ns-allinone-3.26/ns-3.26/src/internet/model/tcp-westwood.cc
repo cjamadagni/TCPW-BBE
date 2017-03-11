@@ -70,6 +70,8 @@ TcpWestwood::TcpWestwood (void) :
   m_lastSampleBW (0),
   m_lastBW (0),
   m_minRtt (Time (0)),
+  m_maxRtt (Time (0)),
+  m_curRtt (Time (0)),
   m_ackedSegments (0),
   m_IsCount (false)
 {
@@ -82,6 +84,8 @@ TcpWestwood::TcpWestwood (const TcpWestwood& sock) :
   m_lastSampleBW (sock.m_lastSampleBW),
   m_lastBW (sock.m_lastBW),
   m_minRtt (Time (0)),
+  m_maxRtt (Time (0)),
+  m_curRtt (Time (0)),
   m_pType (sock.m_pType),
   m_fType (sock.m_fType),
   m_IsCount (sock.m_IsCount)
@@ -121,7 +125,27 @@ TcpWestwood::PktsAcked (Ptr<TcpSocketState> tcb, uint32_t packetsAcked,
         }
     }
 
+  // Update maxRtt
+  if (m_maxRtt.IsZero ())
+    {
+      m_maxRtt = rtt;
+      m_prevMaxRtt = static_cast<double> (m_maxRtt.GetSeconds ());
+    }
+  else
+    {
+      if (rtt > m_maxRtt)
+        {
+          m_prevMaxRtt = static_cast<double> (m_maxRtt.GetSeconds ());
+          m_maxRtt = rtt;
+        }
+    }
+
+  // Update curRTT
+  m_curRtt = rtt;
+
   NS_LOG_LOGIC ("MinRtt: " << m_minRtt.GetMilliSeconds () << "ms");
+  NS_LOG_LOGIC ("MaxRtt: " << m_maxRtt.GetMilliSeconds () << "ms");
+  NS_LOG_LOGIC ("CurRtt: " << m_curRtt.GetMilliSeconds () << "ms");
 
   if (m_pType == TcpWestwood::WESTWOOD)
     {
@@ -183,8 +207,37 @@ TcpWestwood::GetSsThresh (Ptr<const TcpSocketState> tcb,
                 m_minRtt << " ssthresh: " <<
                 m_currentBW * static_cast<double> (m_minRtt.GetSeconds ()));
 
-  return std::max (2*tcb->m_segmentSize,
-                   uint32_t (m_currentBW * static_cast<double> (m_minRtt.GetSeconds ())));
+  // Type casting RTT values to double      
+  double currentRTT = static_cast<double> (m_curRtt.GetSeconds ());
+  double maxRTT = 0.25 * static_cast<double> (m_maxRtt.GetSeconds ()) + 0.75 * m_prevMaxRtt ;
+  //maxRTT = std::max (maxRTT, (currentRTT + 8*10 / m_currentBW)) if m is bytes, why have they given packets in the paper?
+  double minRTT = static_cast<double> (m_minRtt.GetSeconds ());
+       
+
+  // calculating d and dMax      
+  double dMax = maxRTT - minRTT;
+  double d = currentRTT - minRTT;
+
+  // calculating U
+  double u; 
+  if (dMax != 0)            
+     u = 1.0 / std::pow(2.71, ((d/dMax)*10));
+  else
+     u = 1.0;
+  
+  std::cout<<"U = "<<u<<"\n";
+
+  // calculating ERE              
+  double ere = u * m_currentBW + (1-u) * (tcb->m_cWnd / currentRTT);
+  std::cout<<"ERE = "<<ere<<"\n";
+  // calculating ssthresh
+  uint32_t ssthresh = uint32_t (currentRTT * (dMax / (d + dMax)) * ere);
+  std::cout<<"ssthresh = "<<ssthresh<<"\n\n";
+
+  if (tcb->m_cWnd > ssthresh && ssthresh!=0)      
+        return ssthresh;
+  else                     
+        return std::max (2*tcb->m_segmentSize, uint32_t (m_currentBW * static_cast<double> (m_minRtt.GetSeconds ())));
 }
 
 Ptr<TcpCongestionOps>
