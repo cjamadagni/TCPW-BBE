@@ -85,7 +85,8 @@ public:
   enum ProtocolType 
   {
     WESTWOOD,
-    WESTWOODPLUS
+    WESTWOODPLUS,
+    WESTWOODBBE
   };
 
   /**

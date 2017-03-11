@@ -56,7 +56,7 @@ TcpWestwood::GetTypeId (void)
     .AddAttribute("ProtocolType", "Use this to let the code run as Westwood or WestwoodPlus",
                   EnumValue(TcpWestwood::WESTWOOD),
                   MakeEnumAccessor(&TcpWestwood::m_pType),
-                  MakeEnumChecker(TcpWestwood::WESTWOOD, "Westwood",TcpWestwood::WESTWOODPLUS, "WestwoodPlus"))
+                  MakeEnumChecker(TcpWestwood::WESTWOOD, "Westwood",TcpWestwood::WESTWOODPLUS, "WestwoodPlus",TcpWestwood::WESTWOODBBE, "WestwoodBBE"))
     .AddTraceSource("EstimatedBW", "The estimated bandwidth",
                     MakeTraceSourceAccessor(&TcpWestwood::m_currentBW),
                     "ns3::TracedValueCallback::Double")
@@ -147,7 +147,7 @@ TcpWestwood::PktsAcked (Ptr<TcpSocketState> tcb, uint32_t packetsAcked,
   NS_LOG_LOGIC ("MaxRtt: " << m_maxRtt.GetMilliSeconds () << "ms");
   NS_LOG_LOGIC ("CurRtt: " << m_curRtt.GetMilliSeconds () << "ms");
 
-  if (m_pType == TcpWestwood::WESTWOOD)
+  if (m_pType == TcpWestwood::WESTWOOD || m_pType == TcpWestwood::WESTWOODBBE)
     {
       EstimateBW (rtt, tcb);
     }
@@ -160,7 +160,7 @@ TcpWestwood::PktsAcked (Ptr<TcpSocketState> tcb, uint32_t packetsAcked,
           m_bwEstimateEvent = Simulator::Schedule (rtt, &TcpWestwood::EstimateBW,
                                                    this, rtt, tcb);
         }
-    }
+    } 
 }
 
 void
@@ -207,45 +207,55 @@ TcpWestwood::GetSsThresh (Ptr<const TcpSocketState> tcb,
                 m_minRtt << " ssthresh: " <<
                 m_currentBW * static_cast<double> (m_minRtt.GetSeconds ()));
 
-  
-  //Initializing constants required by TCPW-BBE
-  double alpha = 10; 
-  double beta = 0.25;
-  double e = 2.71;
+  if(m_pType == TcpWestwood::WESTWOODBBE)
+  {
 
-  // Type casting RTT values to double      
-  double currentRTT = static_cast<double> (m_curRtt.GetSeconds ());
-  double maxRTT = beta * static_cast<double> (m_maxRtt.GetSeconds ()) + (1-beta) * m_prevMaxRtt ;
-  //maxRTT = std::max (maxRTT, (currentRTT + 8*10 / m_currentBW)) if m is bytes, why have they given packets in the paper?
-  double minRTT = static_cast<double> (m_minRtt.GetSeconds ());
-       
+  	//Initializing constants required by TCPW-BBE
+  	double alpha = 10; 
+  	double beta = 0.25;
+  	double e = 2.71;
 
-  // calculating d and dMax      
-  double dMax = maxRTT - minRTT;
-  double d = currentRTT - minRTT;
+  	std::cout<<"\nInside WESTWOODBBE\n\n";
 
-  // calculating U
-  double u; 
-  if (dMax != 0)            
-     u = 1.0 / std::pow(e, ((d/dMax)*alpha));
+    // Type casting RTT values to double      
+  	double currentRTT = static_cast<double> (m_curRtt.GetSeconds ());
+  	double maxRTT = beta * static_cast<double> (m_maxRtt.GetSeconds ()) + (1-beta) * m_prevMaxRtt ;
+    //maxRTT = std::max (maxRTT, (currentRTT + 8*10 / m_currentBW)) if m is bytes, why have they given packets in the paper?
+  	double minRTT = static_cast<double> (m_minRtt.GetSeconds ());
+
+
+    // calculating d and dMax      
+  	double dMax = maxRTT - minRTT;
+  	double d = currentRTT - minRTT;
+
+    // calculating U
+  	double u; 
+  	if (dMax != 0)            
+  		u = 1.0 / std::pow(e, ((d/dMax)*alpha));
+  	else
+  		u = 1.0;
+
+    //std::cout<<"U = "<<u<<"\n";
+
+    // calculating ERE              
+  	double ere = u * m_currentBW + (1-u) * (tcb->m_cWnd / currentRTT);
+    //std::cout<<"ERE = "<<ere<<"\n";
+
+    // calculating ssthresh
+  	uint32_t ssthresh = uint32_t (currentRTT * (dMax / (d + dMax)) * ere);
+    //std::cout<<"ssthresh = "<<ssthresh<<"\n\n";
+
+  	if (tcb->m_cWnd > ssthresh && ssthresh!=0)      
+  		return ssthresh;
+  	else  
+  		return std::max (2*tcb->m_segmentSize, uint32_t (m_currentBW * static_cast<double> (m_minRtt.GetSeconds ())));
+  }
   else
-     u = 1.0;
-  
-  //std::cout<<"U = "<<u<<"\n";
+  {
 
-  // calculating ERE              
-  double ere = u * m_currentBW + (1-u) * (tcb->m_cWnd / currentRTT);
-  //std::cout<<"ERE = "<<ere<<"\n";
-  
-  // calculating ssthresh
-  uint32_t ssthresh = uint32_t (currentRTT * (dMax / (d + dMax)) * ere);
-  //std::cout<<"ssthresh = "<<ssthresh<<"\n\n";
-
-  if (tcb->m_cWnd > ssthresh && ssthresh!=0)      
-    return ssthresh;
-  else  
-  	return std::max (2*tcb->m_segmentSize, uint32_t (m_currentBW * static_cast<double> (m_minRtt.GetSeconds ())));
-              
+  	return std::max (2*tcb->m_segmentSize,
+                    uint32_t (m_currentBW * static_cast<double> (m_minRtt.GetSeconds ())));
+  }         
         
 }
 
