@@ -207,9 +207,15 @@ TcpWestwood::GetSsThresh (Ptr<const TcpSocketState> tcb,
                 m_minRtt << " ssthresh: " <<
                 m_currentBW * static_cast<double> (m_minRtt.GetSeconds ()));
 
+  
+  //Initializing constants required by TCPW-BBE
+  double alpha = 10; 
+  double beta = 0.25;
+  double e = 2.71;
+
   // Type casting RTT values to double      
   double currentRTT = static_cast<double> (m_curRtt.GetSeconds ());
-  double maxRTT = 0.25 * static_cast<double> (m_maxRtt.GetSeconds ()) + 0.75 * m_prevMaxRtt ;
+  double maxRTT = beta * static_cast<double> (m_maxRtt.GetSeconds ()) + (1-beta) * m_prevMaxRtt ;
   //maxRTT = std::max (maxRTT, (currentRTT + 8*10 / m_currentBW)) if m is bytes, why have they given packets in the paper?
   double minRTT = static_cast<double> (m_minRtt.GetSeconds ());
        
@@ -221,23 +227,26 @@ TcpWestwood::GetSsThresh (Ptr<const TcpSocketState> tcb,
   // calculating U
   double u; 
   if (dMax != 0)            
-     u = 1.0 / std::pow(2.71, ((d/dMax)*10));
+     u = 1.0 / std::pow(e, ((d/dMax)*alpha));
   else
      u = 1.0;
   
-  std::cout<<"U = "<<u<<"\n";
+  //std::cout<<"U = "<<u<<"\n";
 
   // calculating ERE              
   double ere = u * m_currentBW + (1-u) * (tcb->m_cWnd / currentRTT);
-  std::cout<<"ERE = "<<ere<<"\n";
+  //std::cout<<"ERE = "<<ere<<"\n";
+  
   // calculating ssthresh
   uint32_t ssthresh = uint32_t (currentRTT * (dMax / (d + dMax)) * ere);
-  std::cout<<"ssthresh = "<<ssthresh<<"\n\n";
+  //std::cout<<"ssthresh = "<<ssthresh<<"\n\n";
 
   if (tcb->m_cWnd > ssthresh && ssthresh!=0)      
-        return ssthresh;
-  else                     
-        return std::max (2*tcb->m_segmentSize, uint32_t (m_currentBW * static_cast<double> (m_minRtt.GetSeconds ())));
+    return ssthresh;
+  else  
+  	return std::max (2*tcb->m_segmentSize, uint32_t (m_currentBW * static_cast<double> (m_minRtt.GetSeconds ())));
+              
+        
 }
 
 Ptr<TcpCongestionOps>
